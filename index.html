@@ -3,21 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pricing & Marketing Budget Calculator</title>
+    <title>Advanced Pricing & Sales Calculator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
             padding: 20px;
-            max-width: 600px;
+            background: linear-gradient(to right, #f3f4f6, #e5e7eb);
+            max-width: 900px;
             margin: auto;
+            border-radius: 10px;
+            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
         }
-        input {
+        h1 {
+            text-align: center;
+            color: #4CAF50;
+        }
+        label {
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        input, button, .slider {
             margin: 10px 0;
-            padding: 5px;
+            padding: 10px;
             width: 100%;
+            border-radius: 5px;
+            border: 1px solid #ddd;
         }
         button {
-            padding: 10px;
             background-color: #4CAF50;
             color: white;
             border: none;
@@ -26,49 +39,154 @@
         button:hover {
             background-color: #45a049;
         }
-        .result {
+        .result, .chart-container {
             margin: 20px 0;
             padding: 10px;
-            background: #f9f9f9;
+            background: white;
             border: 1px solid #ddd;
+            border-radius: 10px;
+            box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .instructions {
+            background: #fff4db;
+            padding: 15px;
+            border: 1px solid #ffcc80;
+            border-radius: 10px;
+            margin-bottom: 20px;
         }
     </style>
 </head>
 <body>
-    <h1>Pricing & Marketing Budget Calculator</h1>
-    <label for="cost">Enter Product Cost:</label>
-    <input type="number" id="cost" placeholder="Enter cost per unit">
+    <h1>Advanced Pricing & Sales Calculator</h1>
+    <div class="instructions">
+        <p><strong>Instructions:</strong></p>
+        <ul>
+            <li>Enter the cost per unit or total stock cost, the total number of units, and the profit margin percentage.</li>
+            <li>Set the marketing budget either as a percentage of revenue or as a fixed amount using the provided fields.</li>
+            <li>Input your target sales or desired revenue to estimate the units required to reach your goal.</li>
+            <li>Adjust the CPC slider to evaluate the impact of cost per click on advertising performance.</li>
+            <li>Review the calculated results and visualize the cost breakdown using the chart.</li>
+            <li>Export your calculated results for reference or sharing using the "Export Data" button.</li>
+        </ul>
+    </div>
 
-    <label for="margin">Desired Profit Margin (%):</label>
-    <input type="number" id="margin" placeholder="Enter profit margin">
+    <!-- Input Fields -->
+    <label for="cost">Cost Per Unit (or Total Stock Cost):</label>
+    <input type="number" id="cost" placeholder="Enter cost in dollars">
 
-    <label for="marketing">Marketing Budget (%):</label>
+    <label for="units">Total Number of Units:</label>
+    <input type="number" id="units" placeholder="Enter total units in stock">
+
+    <label for="margin">Profit Margin (%):</label>
+    <input type="range" id="margin" class="slider" min="0" max="100" step="1" oninput="updateMarginValue(this.value)">
+    <span id="margin-value">50%</span>
+
+    <label for="marketing">Marketing Budget (% of Revenue):</label>
     <input type="number" id="marketing" placeholder="Enter marketing budget percentage">
 
-    <button onclick="calculate()">Calculate</button>
+    <label for="manualMarketing">Manual Marketing Budget (Fixed Amount):</label>
+    <input type="number" id="manualMarketing" placeholder="Enter fixed marketing budget in dollars">
 
+    <label for="targetSales">Target Revenue (in dollars):</label>
+    <input type="number" id="targetRevenue" placeholder="Enter desired revenue target">
+
+    <label for="cpc">Cost Per Click (CPC):</label>
+    <input type="range" id="cpc" class="slider" min="0" max="5" step="0.1" oninput="updateCPCValue(this.value)">
+    <span id="cpc-value">$0.50</span>
+
+    <button onclick="calculate()">Calculate</button>
+    <button onclick="clearFields()">Clear</button>
+    <button onclick="exportData()">Export Data</button>
+
+    <!-- Results Section -->
     <div class="result" id="result"></div>
 
+    <!-- Chart Section -->
+    <div class="chart-container">
+        <canvas id="costBreakdownChart"></canvas>
+    </div>
+
     <script>
+        function updateMarginValue(value) {
+            document.getElementById('margin-value').textContent = `${value}%`;
+        }
+
+        function updateCPCValue(value) {
+            document.getElementById('cpc-value').textContent = `$${parseFloat(value).toFixed(2)}`;
+        }
+
         function calculate() {
             const cost = parseFloat(document.getElementById('cost').value);
+            const units = parseInt(document.getElementById('units').value);
             const margin = parseFloat(document.getElementById('margin').value);
-            const marketing = parseFloat(document.getElementById('marketing').value);
+            const marketingPercent = parseFloat(document.getElementById('marketing').value);
+            const manualMarketing = parseFloat(document.getElementById('manualMarketing').value);
+            const targetRevenue = parseFloat(document.getElementById('targetRevenue').value);
+            const cpc = parseFloat(document.getElementById('cpc').value);
 
-            if (isNaN(cost) || isNaN(margin) || isNaN(marketing)) {
-                document.getElementById('result').innerText = "Please enter valid numbers in all fields.";
+            if (isNaN(cost) || isNaN(units) || isNaN(margin) || isNaN(cpc)) {
+                document.getElementById('result').innerHTML = "<p>Please enter valid numbers in all required fields.</p>";
                 return;
             }
 
-            const price = cost + (cost * (margin / 100));
-            const marketingBudget = price * (marketing / 100);
-            const breakEven = Math.ceil(cost / (price - cost));
+            const pricePerUnit = cost + (cost * (margin / 100));
+            const totalMarketing = manualMarketing || (pricePerUnit * units * (marketingPercent / 100));
+            const marketingPerUnit = totalMarketing / units;
+            const totalCost = cost * units + totalMarketing;
+            const breakEvenUnits = Math.ceil(totalCost / pricePerUnit);
+
+            let requiredUnits = null;
+            if (!isNaN(targetRevenue)) {
+                requiredUnits = Math.ceil(targetRevenue / pricePerUnit);
+            }
+
+            const estimatedClicks = totalMarketing / cpc;
+            const estimatedImpressions = estimatedClicks * 100; // Assuming a CTR of 1%.
 
             document.getElementById('result').innerHTML = `
-                <p><strong>Suggested Price:</strong> $${price.toFixed(2)}</p>
-                <p><strong>Marketing Budget:</strong> $${marketingBudget.toFixed(2)}</p>
-                <p><strong>Break-Even Units:</strong> ${breakEven} unit(s)</p>
+                <p><strong>Total Stock Cost:</strong> $${(cost * units).toFixed(2)}</p>
+                <p><strong>Price Per Unit:</strong> $${pricePerUnit.toFixed(2)}</p>
+                <p><strong>Marketing Budget:</strong> $${totalMarketing.toFixed(2)}</p>
+                <p><strong>Marketing Budget Per Unit:</strong> $${marketingPerUnit.toFixed(2)}</p>
+                <p><strong>Break-Even Units:</strong> ${breakEvenUnits} units</p>
+                ${requiredUnits !== null ? `<p><strong>Units Required to Reach Target Revenue:</strong> ${requiredUnits} units</p>` : ''}
+                <p><strong>Estimated Ad Clicks:</strong> ${Math.floor(estimatedClicks)}</p>
+                <p><strong>Estimated Impressions:</strong> ${Math.floor(estimatedImpressions)}</p>
             `;
+
+            drawChart(cost * units, totalMarketing, pricePerUnit * units);
+        }
+
+        function clearFields() {
+            document.getElementById('cost').value = '';
+            document.getElementById('units').value = '';
+            document.getElementById('marketing').value = '';
+            document.getElementById('manualMarketing').value = '';
+            document.getElementById('targetRevenue').value = '';
+            document.getElementById('result').innerHTML = '';
+        }
+
+        function exportData() {
+            const data = document.getElementById('result').innerText;
+            const blob = new Blob([data], { type: 'text/plain' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'calculated_data.txt';
+            link.click();
+        }
+
+        function drawChart(cost, marketing, revenue) {
+            const ctx = document.getElementById('costBreakdownChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Stock Cost', 'Marketing', 'Profit'],
+                    datasets: [{
+                        data: [cost, marketing, revenue - cost - marketing],
+                        backgroundColor: ['#ff6384', '#36a2eb', '#4caf50']
+                    }]
+                }
+            });
         }
     </script>
 </body>
